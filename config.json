@@ -1,0 +1,10 @@
+{
+  "choices": {
+    "_": [],
+    "url": "testurl",
+    "username": "shibuser",
+    "password": "shibpasswd",
+    "page": 5,
+    "saveCreds": "no"
+  }
+}

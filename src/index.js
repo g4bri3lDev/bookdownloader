@@ -1,8 +1,15 @@
 const inquirer = require('inquirer')
 const puppeteer = require('puppeteer')
 const cliSpinner = require('cli-spinner')
-let choices
+const nconf = require('nconf')
+const args = require('minimist')(process.argv.slice(2));
+
+nconf
+    .file({file: './config.json'})
+    .argv()
+let choices = args
 const spinner = new cliSpinner.Spinner().setSpinnerString(2)
+// console.log(nconf.get('choices'))
 const selectors = {
     username: "#username",
     password: "#password",
@@ -12,59 +19,82 @@ const selectors = {
     startPage: "#startPage",
     endPage: "#endPage",
     download: "#printContinue",
-    openPDF:"#printOpenPDF"
+    openPDF: "#printOpenPDF"
 }
 inquirer.prompt([
     {
         name: "url",
         message: "book url",
-        type: "input"
+        type: "input",
+        when: nconf.get('choices').url === undefined
     },
     {
         name: "page",
         message: "starting page",
-        type: "number"
+        type: "number",
+        when: nconf.get('choices').page === undefined
     },
     {
         name: "username",
         message: "shibboleth username",
-        type: "input"
+        type: "input",
+        when: nconf.get('choices').username === undefined
     },
     {
         name: "password",
         message: "shibboleth password",
-        type: "password"
+        type: "password",
+        when: nconf.get('choices').password === undefined
     },
     {
         name: "saveCreds",
         message: "save credentials in plain text?",
         type: "list",
-        choices: ['yes', 'no']
+        choices: ['yes', 'no'],
+        when: nconf.get('choices').saveCreds === undefined
     }
 
 ])
     .then(answer => {
-        choices = answer
+        answer=Object.assign({},choices,answer)
+        choices = Object.assign({}, nconf.get('choices'), answer)
+        nconf.set('choices', choices)
+        if (nconf.get('choices').saveCreds === 'yes') {
+            nconf.save(function () {
+                require('fs').readFile('./config.json', function (err, data) {
+                    JSON.parse(data.toString())
+                })
+            })
+        }
         spinner.start()
-
     }).then(() => {
     (async () => {
             const browser = await puppeteer.launch({headless: false})
             const page = await browser.newPage()
-            await page.goto(choices.url)
+            await page.goto(nconf.get('choices').url)
             await page.click(selectors.username)
-            await page.keyboard.type(choices.username)
+            await page.keyboard.type(nconf.get('choices').username)
             await page.click(selectors.password)
-            await page.keyboard.type(choices.password)
+            await page.keyboard.type(nconf.get('choices').password)
             await page.click(selectors.login)
+            if (page.url()==="https://login.tum.de/idp/profile/SAML2/Redirect/SSO?execution=e1s2"){
+                await browser.close()
+                console.error("Username or password were incorrect.")
+                process.exit()
+            }
             await page.waitForNavigation({waitUntil: 'networkidle0'})
+            if (await page.evaluate('document.querySelector("' + selectors.print + '").getAttribute("disabled")')==='disabled'){
+                await browser.close()
+                console.error("print contingent already reached")
+                process.exit()
+            }
             await page.click(selectors.print)
             await page.waitForSelector(selectors.pagesRadio)
             await page.click(selectors.pagesRadio)
             await page.click(selectors.startPage)
-            await page.keyboard.type(choices.page.toString())
+            await page.keyboard.type(nconf.get('choices').page.toString())
             await page.click(selectors.endPage)
-            await page.keyboard.type((choices.page + 36).toString())
+            await page.keyboard.type((nconf.get('choices').page + 36).toString())
             const client = await page.target().createCDPSession();
             await client.send('Page.setDownloadBehavior', {
                 behavior: 'allow', downloadPath: './downloads/'
@@ -75,10 +105,10 @@ inquirer.prompt([
             await page.waitFor(10000)
             // await page.goto(choices.url, {waitUntil: "networkidle2"})
 
-            await page.screenshot({path: 'test.png'})
+            // await page.screenshot({path: 'test.png'})
             await browser.close()
         }
     )()
-}).then(()=>{
+}).then(() => {
     spinner.stop()
 })

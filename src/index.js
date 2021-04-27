@@ -6,8 +6,10 @@ const args = require('minimist')(process.argv.slice(2));
 
 nconf
     .file({file: './config.json'})
-    .argv()
+
 let choices = args
+choices = Object.assign({}, nconf.get('choices'), choices)
+nconf.set('choices', choices)
 const spinner = new cliSpinner.Spinner().setSpinnerString(2)
 // console.log(nconf.get('choices'))
 const selectors = {
@@ -56,9 +58,9 @@ inquirer.prompt([
 
 ])
     .then(answer => {
-        answer=Object.assign({},choices,answer)
-        choices = Object.assign({}, nconf.get('choices'), answer)
-        nconf.set('choices', choices)
+        answer = Object.assign({}, choices, answer)
+
+        nconf.set('choices', answer)
         if (nconf.get('choices').saveCreds === 'yes') {
             nconf.save(function () {
                 require('fs').readFile('./config.json', function (err, data) {
@@ -77,13 +79,13 @@ inquirer.prompt([
             await page.click(selectors.password)
             await page.keyboard.type(nconf.get('choices').password)
             await page.click(selectors.login)
-            if (page.url()==="https://login.tum.de/idp/profile/SAML2/Redirect/SSO?execution=e1s2"){
+            if (page.url() === "https://login.tum.de/idp/profile/SAML2/Redirect/SSO?execution=e1s2") {
                 await browser.close()
                 console.error("Username or password were incorrect.")
                 process.exit()
             }
             await page.waitForNavigation({waitUntil: 'networkidle0'})
-            if (await page.evaluate('document.querySelector("' + selectors.print + '").getAttribute("disabled")')==='disabled'){
+            if (await page.evaluate('document.querySelector("' + selectors.print + '").getAttribute("disabled")') === 'disabled') {
                 await browser.close()
                 console.error("print contingent already reached")
                 process.exit()
@@ -107,9 +109,24 @@ inquirer.prompt([
             // await page.goto(choices.url, {waitUntil: "networkidle2"})
 
             // await page.screenshot({path: 'test.png'})
-            await browser.close()
+            await browser.close().then(() => {
+                const originalConfig = {...nconf.get('choices')}
+                if (nconf.get('choices').saveCreds === 'no') {
+                    delete originalConfig.username
+                    delete originalConfig.password
+                    // console.log(originalConfig)
+                }
+                originalConfig.page += 37
+                nconf.set('choices', originalConfig)
+                nconf.save(function () {
+                    require('fs').readFile('./config.json', function (err, data) {
+                        JSON.parse(data.toString())
+                    })
+                })
+            })
         }
     )()
 }).then(() => {
+
     spinner.stop()
 })

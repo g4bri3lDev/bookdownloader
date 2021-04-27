@@ -88,6 +88,7 @@ inquirer.prompt([
                 console.error("print contingent already reached")
                 process.exit()
             }
+            await page.waitForSelector(selectors.print)
             await page.click(selectors.print)
             await page.waitForSelector(selectors.pagesRadio)
             await page.click(selectors.pagesRadio)
